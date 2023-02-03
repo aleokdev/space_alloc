@@ -42,7 +42,12 @@ impl std::fmt::Debug for BuddyAllocator {
             let item_spacing = 2 * start_spacing + 1;
             string.extend(std::iter::repeat(' ').take(start_spacing));
             for _block in 0..2usize.pow(level as u32) {
-                string.push_str(format!("{:x}", self.read_block(index)).as_str());
+                if self.is_allocated(index) {
+                    string.push_str("x");
+                } else {
+                    string.push_str(format!("{:x}", self.read_block(index)).as_str());
+                }
+
                 string.extend(std::iter::repeat(' ').take(item_spacing));
                 index += 1;
             }
@@ -109,6 +114,16 @@ impl BuddyAllocator {
 
     const fn parent(i: usize) -> usize {
         ((i + 1) >> 1) - 1
+    }
+
+    fn is_allocated(&self, i: usize) -> bool {
+        if self.read_block(i) == 0 {
+            true
+        } else if i == 0 {
+            false
+        } else {
+            self.is_allocated(Self::parent(i))
+        }
     }
 
     pub fn order_of(size: NonZeroU64, o0_size: u64) -> u8 {
@@ -260,7 +275,7 @@ mod test {
     fn allocate_single() {
         //    2
         //  1   2
-        // 0 1 1 1
+        // x 1 1 1
         let mut allocator = BuddyAllocator::new(2, 1);
         allocator.allocate(nonzero!(1u64), nonzero!(1u64)).unwrap();
         println!("{:?}", allocator);
@@ -276,8 +291,8 @@ mod test {
     #[test]
     fn allocate_small() {
         //    1
-        //  0   1
-        // 0 0 0 1
+        //  x   1
+        // x x x 1
         let mut allocator = BuddyAllocator::new(2, 1);
         allocator.allocate(nonzero!(1u64), nonzero!(1u64)).unwrap();
         allocator.allocate(nonzero!(1u64), nonzero!(1u64)).unwrap();
@@ -295,8 +310,8 @@ mod test {
     #[test]
     fn allocate_mixed() {
         //    1
-        //  1   0
-        // 0 1 1 1
+        //  1   x
+        // x 1 X X
         let mut allocator = BuddyAllocator::new(2, 1);
         allocator.allocate(nonzero!(1u64), nonzero!(1u64)).unwrap();
         allocator.allocate(nonzero!(2u64), nonzero!(1u64)).unwrap();
